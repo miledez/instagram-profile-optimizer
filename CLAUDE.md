@@ -59,6 +59,7 @@ Business model: one-time makeover setup fee + monthly subscription
 
 ## Key references
 
+- `docs/PRD.md` is the source of truth for scope. Before building, read the feature row (ID, acceptance criteria). After completing, set status to done and append to PRD §9. Never renumber feature IDs.
 - `docs/scorer-spec.md` — rubric, API calls, prompts, schema, edge cases
 - `docs/decisions.md` — why things are the way they are
 - `STATUS.md` — current phase, next actions, blockers
