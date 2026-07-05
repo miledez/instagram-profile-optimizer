@@ -17,17 +17,18 @@
 
 ## In progress
 
-- [ ] F-101 handle resolver — pure functions done (`extract_ig_handles`,
-      `pick_best_handle`); missing: Supabase wiring, website fetch loop,
-      linktree one-level-deep follow, CLI flags, suppression check
+- [ ] F-101 handle resolver — code complete (website scrape, aggregator
+      one-level follow, Places details fallback, suppression + dedupe,
+      --limit/--dry-run); AC "≥70% auto-resolved" pending first real batch
+      (needs Supabase creds + prospects loaded) before PRD flips to done
 
 ## Next actions (Week 1, in order)
 
 - [ ] Create Meta app: `instagram_basic` + `instagram_manage_insights`,
       long-lived token — resolves Q1, unblocks F-102
 - [ ] Apply migration 0001 to Supabase project
-- [ ] F-101: finish `scripts/resolve_handles.py` (AC: ≥70% auto-resolved,
-      method logged, invalid handles never written)
+- [ ] F-101: run first batch (`--dry-run` then live) once migration applied
+      and prospects imported; verify ≥70% auto-resolve → mark done in PRD
 - [ ] F-102: n8n `01-scorer-daily` Business Discovery fetch (25s spacing,
       error 110 → `unscoreable_personal`)
 - [ ] F-103: deterministic signals S1/S2/S4 per spec §2 (likes-hidden fallback)
