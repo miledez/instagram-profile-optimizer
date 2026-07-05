@@ -33,10 +33,11 @@
 
 ## Next actions (Week 1, in order)
 
-- [ ] Create Programmable Search Engine (cse.google.com), set
-      `GOOGLE_CSE_ID` in `.env`, enable Custom Search API on the Google key;
-      re-run `resolve_handles.py --dry-run --segment <all six> --limit 200`
-      → if ≥70%, live run + mark F-101 done in PRD (mind 100 CSE queries/day)
+- [ ] Sign up at api-dashboard.search.brave.com, set `BRAVE_SEARCH_API_KEY`
+      in `.env` (Google CSE closed to new customers since 2026, sunsets
+      2027-01; Brave ≈ $5/1k with $5/mo free credit, needs card +
+      attribution note); re-run `resolve_handles.py --dry-run --segment
+      <all six> --limit 200` → if ≥70%, live run + mark F-101 done in PRD
 - [ ] Create Meta app: `instagram_basic` + `instagram_manage_insights`,
       long-lived token — resolves Q1, unblocks F-102
 - [ ] Decide RLS: migration 0002 enabling RLS (no policies; service role

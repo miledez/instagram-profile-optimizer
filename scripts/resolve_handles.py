@@ -6,9 +6,11 @@ Strategy (in order, stop at first hit):
   1. website_scrape — fetch prospect.website, regex instagram.com/{handle}
      links (also check linktree/beacons pages one level deep).
   2. search        — Places details 'website' (GOOGLE_PLACES_API_KEY), then
-     Google Custom Search JSON API: site:instagram.com "{name}" {city}
-     (GOOGLE_CSE_ID; official API — the ToS ban is on scraping Google, and
-     CSE picks require a name/handle token match to avoid wrong profiles).
+     web search for site:instagram.com "{name}" {city} via Brave Search API
+     (BRAVE_SEARCH_API_KEY) or, for grandfathered accounts only, Google
+     Custom Search JSON API (GOOGLE_CSE_ID — closed to new customers since
+     2026, sunsets 2027-01-01). Official APIs only; search picks require a
+     name/handle token match to avoid wrong profiles.
   3. manual        — dashboard queue, human pastes handle (row left null).
 
 Writes back to Supabase prospects.ig_handle + ig_resolution_method.
@@ -19,8 +21,8 @@ Usage:
   python resolve_handles.py --limit 100 [--dry-run] [--segment a,b]
 
 Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY; optional GOOGLE_PLACES_API_KEY,
+BRAVE_SEARCH_API_KEY (~$5/1k queries, $5/mo free credit), or legacy
 GOOGLE_CSE_ID (+ GOOGLE_CSE_API_KEY if not reusing the Places key).
-CSE free tier: 100 queries/day — size --limit accordingly.
 """
 
 import argparse
@@ -153,25 +155,50 @@ def resolve_via_website(website: str, business_name: str) -> str | None:
     return pick_best_handle(handles, business_name)
 
 
+def _search_query(business_name: str, city: str | None) -> str:
+    return f'site:instagram.com "{business_name}"' + (f" {city}" if city else "")
+
+
+def _handles_from_links(links: list[str]) -> list[str]:
+    handles = []
+    for link in links:
+        h = handle_from_instagram_url(link)
+        if h and h not in handles:
+            handles.append(h)
+    return handles
+
+
+def brave_search_handles(business_name: str, city: str | None,
+                         api_key: str) -> list[str]:
+    """Instagram handles from Brave Search results, best-ranked first."""
+    try:
+        resp = requests.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            params={"q": _search_query(business_name, city), "count": 5},
+            headers={"X-Subscription-Token": api_key, "Accept": "application/json"},
+            timeout=TIMEOUT,
+        )
+        items = resp.json().get("web", {}).get("results", []) if resp.ok else []
+    except (requests.RequestException, ValueError):
+        return []
+    return _handles_from_links([i.get("url", "") for i in items])
+
+
 def cse_search_handles(business_name: str, city: str | None,
                        api_key: str, cse_id: str) -> list[str]:
-    """Instagram handles from Custom Search results, best-ranked first."""
-    query = f'site:instagram.com "{business_name}"' + (f" {city}" if city else "")
+    """Instagram handles via legacy Custom Search JSON API (grandfathered
+    accounts only — closed to new customers, sunsets 2027-01-01)."""
     try:
         resp = requests.get(
             "https://www.googleapis.com/customsearch/v1",
-            params={"key": api_key, "cx": cse_id, "q": query, "num": 5},
+            params={"key": api_key, "cx": cse_id,
+                    "q": _search_query(business_name, city), "num": 5},
             timeout=TIMEOUT,
         )
         items = resp.json().get("items", []) if resp.ok else []
     except (requests.RequestException, ValueError):
         return []
-    handles = []
-    for item in items:
-        h = handle_from_instagram_url(item.get("link", ""))
-        if h and h not in handles:
-            handles.append(h)
-    return handles
+    return _handles_from_links([i.get("link", "") for i in items])
 
 
 def places_website(places_id: str, api_key: str) -> str | None:
@@ -199,6 +226,7 @@ def main() -> int:
         print("error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required", file=sys.stderr)
         return 1
     places_key = os.environ.get("GOOGLE_PLACES_API_KEY")
+    brave_key = os.environ.get("BRAVE_SEARCH_API_KEY")
     cse_id = os.environ.get("GOOGLE_CSE_ID")
     cse_key = os.environ.get("GOOGLE_CSE_API_KEY") or places_key
 
@@ -239,10 +267,15 @@ def main() -> int:
             if site and site != p.get("website"):
                 handle = resolve_via_website(site, p["business_name"])
                 method = "search"
-        if not handle and cse_id and cse_key:
-            candidates = cse_search_handles(
-                p["business_name"], p.get("city"), cse_key, cse_id
-            )
+        if not handle and (brave_key or (cse_id and cse_key)):
+            if brave_key:
+                candidates = brave_search_handles(
+                    p["business_name"], p.get("city"), brave_key
+                )
+            else:
+                candidates = cse_search_handles(
+                    p["business_name"], p.get("city"), cse_key, cse_id
+                )
             handle = pick_best_handle(candidates, p["business_name"], require_match=True)
             method = "search"
 

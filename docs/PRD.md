@@ -6,7 +6,7 @@
 > `done` `cut` `changed` · priority: `P0` (launch-blocking) `P1` (pre-scale)
 > `P2` (later).
 
-**Version:** 1.3 · **Updated:** 2026-07-05 · **Owner:** Simon / mil&dez
+**Version:** 1.4 · **Updated:** 2026-07-05 · **Owner:** Simon / mil&dez
 
 ---
 
@@ -143,3 +143,4 @@ automation).
 | 2026-07-05 | 1.1 | F-101 implementation complete (scrape + aggregator follow + Places fallback + suppression/dedupe); stays `building` until ≥70% AC verified on first real batch. Supabase project live (`ejxoageyamogdgwwycvp`, sa-east-1), migration 0001 applied — F-601 view deployed. | F-101, F-601 |
 | 2026-07-05 | 1.2 | Added F-110: prospecting (stage 1a) moved into this repo as `scripts/prospect.py`, `done`. First resolver batch on 79 off-ICP pilot rows: 40% auto-resolve — not an AC verdict (B2B clinics, no Places key at the time); fixes shipped (escaped-URL regex, platform-account blocklist, SSL retry). On-segment micro-sample: 3/3 with-website resolved. | F-110, F-101, D-007 |
 | 2026-07-05 | 1.3 | First on-segment AC batch (128 prospects, 6 segments): 47% overall, 64% of with-website — 26% of prospects have no website, the structural gap. Added Custom Search JSON API step to F-101 `search` method (official API; zero-overlap picks rejected); activates when `GOOGLE_CSE_ID` is set. AC re-measure pending CSE credentials. | F-101 |
+| 2026-07-05 | 1.4 | Google CSE JSON API closed to new customers (sunsets 2027-01-01) — unusable for us. Web-search step now uses Brave Search API (`BRAVE_SEARCH_API_KEY`, ≈$5/1k, $5/mo free credit); CSE branch kept for grandfathered configs only. Same token-match guard. | F-101 |
