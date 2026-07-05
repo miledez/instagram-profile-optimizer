@@ -21,23 +21,25 @@
       Iterations that got there: escaped-URL regex, platform/asset
       blocklists, SSL retry, accent folding + ≥3-char tokens, Brave
       quoted→unquoted fallback gated on distinctive-token match.
-- [x] `.env` complete: Supabase URL/key + Places key, all verified live
+- [x] `.env` complete: Supabase URL/key + Places + Brave keys, verified live
 - [x] P1/P2 prompts drafted (`prompts/`)
+- [x] Migration 0002: RLS enabled all tables (no policies; service role
+      bypasses — verified post-apply)
+- [x] Migration 0003: `v_prospects_to_score` — scoring-time suppression (F-108)
+- [x] n8n `01-scorer-daily.json` built (F-102→F-105, F-107): BD fetch w/
+      error-110 routing, prefilters, S1/S2/S4 + evidence Code node, Claude
+      P1/P2 HTTP, upsert w/ on_conflict — JS fixture-tested (25 checks)
+- [x] 79 `outro` pilot rows deleted — prospects table is 128 on-segment only
 
 ## Next actions (Week 1, in order)
 
 - [ ] Create Meta app: `instagram_basic` + `instagram_manage_insights`,
-      long-lived token — resolves Q1, unblocks F-102
-- [ ] Decide RLS: migration 0002 enabling RLS (no policies; service role
-      bypasses) — Supabase advisor flags all 6 tables, prospect PII/LGPD
-- [ ] F-102: n8n `01-scorer-daily` Business Discovery fetch (25s spacing,
-      error 110 → `unscoreable_personal`)
-- [ ] F-103: deterministic signals S1/S2/S4 per spec §2 (likes-hidden fallback)
-- [ ] F-104/F-105: wire P1/P2 Claude calls in n8n, log raw to `llm_raw`,
-      persist `dominant_colors` always
-- [ ] F-107: evidence generator — top-3 weakness strings PT-BR → `evidence` jsonb
-- [ ] F-108: suppression enforcement at scoring time (send-time check comes
-      with outreach in week 3)
+      long-lived token — resolves Q1, unblocks live scorer test
+- [ ] Import `n8n/01-scorer-daily.json` into n8n, create the 3 credentials
+      + set IG user id (see `n8n/README.md` setup section)
+- [ ] Live scorer run on 2–3 handles → verify rows in `prospect_scores`,
+      spot-check `llm_raw` → then full queue (116) → F-102→F-105/F-107/F-108
+      to done
 - [ ] Week 2 preview: F-106 dashboard review queue, F-201→F-205 mockups,
       F-301/F-302 demo
 
@@ -57,11 +59,9 @@
   credit condition)
 - Rotate Supabase service_role key (was printed during debug session)
 - Delete leftover broken `.venv/` dir in repo root
-- Decide fate of 79 `outro` pilot rows in `prospects` (keep as resolver
-  test data vs delete before scoring starts)
 
 ## Current metrics
 
-- Prospects in DB: 207 (128 on-segment · 79 outro pilot) · Handles
-  resolved: 116 (90%) · Manual queue: 12 · Scored: 0 · Qualified: 0 · Sends: 0
+- Prospects in DB: 128 (all on-segment) · Handles resolved: 116 (90%) ·
+  Manual queue: 12 · Scored: 0 · Qualified: 0 · Sends: 0
 - Week-1 exit criteria: scorer live, 100 profiles scored

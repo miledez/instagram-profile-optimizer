@@ -6,7 +6,7 @@
 > `done` `cut` `changed` · priority: `P0` (launch-blocking) `P1` (pre-scale)
 > `P2` (later).
 
-**Version:** 1.5 · **Updated:** 2026-07-05 · **Owner:** Simon / mil&dez
+**Version:** 1.6 · **Updated:** 2026-07-05 · **Owner:** Simon / mil&dez
 
 ---
 
@@ -46,13 +46,13 @@ automation).
 |---|---|---|---|---|
 | F-101 | Handle resolver (`resolve_handles.py`) | P0 | done | ≥70% of prospects auto-resolved; method logged; invalid handles never written |
 | F-110 | Places prospecting CLI (`scripts/prospect.py`) | P0 | done | 6 segments; idempotent re-runs (dedupe on `places_id`); valid rows (E.164 phone, UF, city tier); D-007 |
-| F-102 | Business Discovery fetcher (n8n) | P0 | planned | 1 call/prospect; 25s spacing; error 110 → `unscoreable_personal` |
-| F-103 | Deterministic signals S1/S2/S4 | P0 | planned | Matches spec §2 tables; likes-hidden fallback works |
-| F-104 | P1 bio classifier | P0 | planned | JSON parse rate >98%; raw output logged to `llm_raw` |
-| F-105 | P2 grid vision + palette | P0 | planned | 9 imgs @512px same-run fetch; `dominant_colors` persisted always |
+| F-102 | Business Discovery fetcher (n8n) | P0 | building | 1 call/prospect; 25s spacing; error 110 → `unscoreable_personal` |
+| F-103 | Deterministic signals S1/S2/S4 | P0 | building | Matches spec §2 tables; likes-hidden fallback works |
+| F-104 | P1 bio classifier | P0 | building | JSON parse rate >98%; raw output logged to `llm_raw` |
+| F-105 | P2 grid vision + palette | P0 | building | 9 imgs @512px same-run fetch; `dominant_colors` persisted always |
 | F-106 | Review queue (dashboard) | P0 | planned | S6/S7 checklist + screenshot upload; ≤30s per profile |
-| F-107 | Evidence generator (PT-BR) | P0 | planned | Top-3 weakness strings stored in `evidence` jsonb |
-| F-108 | Suppression enforcement | P0 | planned | Checked at scoring AND before every send; opt-outs land here same day |
+| F-107 | Evidence generator (PT-BR) | P0 | building | Top-3 weakness strings stored in `evidence` jsonb |
+| F-108 | Suppression enforcement | P0 | building | Checked at scoring AND before every send; opt-outs land here same day |
 | F-109 | Benchmark calibration | P1 | planned | After 200 scored: segment medians replace defaults; 25–35% qualify |
 
 ### E2 — Mockup generation (lives in Frame repo; tracked here)
@@ -145,3 +145,4 @@ automation).
 | 2026-07-05 | 1.3 | First on-segment AC batch (128 prospects, 6 segments): 47% overall, 64% of with-website — 26% of prospects have no website, the structural gap. Added Custom Search JSON API step to F-101 `search` method (official API; zero-overlap picks rejected); activates when `GOOGLE_CSE_ID` is set. AC re-measure pending CSE credentials. | F-101 |
 | 2026-07-05 | 1.4 | Google CSE JSON API closed to new customers (sunsets 2027-01-01) — unusable for us. Web-search step now uses Brave Search API (`BRAVE_SEARCH_API_KEY`, ≈$5/1k, $5/mo free credit); CSE branch kept for grandfathered configs only. Same token-match guard. | F-101 |
 | 2026-07-05 | 1.5 | **F-101 done** — AC met: 90% auto-resolved (116/128 on-segment, live run written). Matcher: accent folding, ≥3-char tokens; Brave: quoted→unquoted fallback with distinctive-token guard (generic category words don't count as a match). Caveat: `search`-method picks (55) have lower precision than scrapes — a handful look like wrong profiles; review prioritizes `ig_resolution_method='search'`. Manual queue: 12. | F-101 |
+| 2026-07-05 | 1.6 | F-102→F-105, F-107, F-108 → `building`: n8n `01-scorer-daily` built (Code-node logic fixture-tested, 25 checks vs spec tables); migrations 0002 (RLS on, no policies) and 0003 (`v_prospects_to_score` — scoring-time suppression) applied. Live test blocked on Meta app creds. Deviation: P2 images sent as URLs, not 512px downscales (no image lib in n8n). 79 `outro` pilot rows deleted. | F-102→F-108 |

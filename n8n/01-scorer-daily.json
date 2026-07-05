@@ -1,0 +1,548 @@
+{
+  "name": "01-scorer-daily",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger",
+      "name": "Daily 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://ejxoageyamogdgwwycvp.supabase.co/rest/v1/v_prospects_to_score?select=id,ig_handle,segment,business_name&limit=150",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "id": "fetch-queue",
+      "name": "Fetch Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        300
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Supabase service (custom auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "split",
+      "name": "Split Queue",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "done",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        600,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 25
+      },
+      "id": "wait",
+      "name": "Wait 25s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        600,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v23.0/REPLACE_MILEDEZ_IG_USER_ID?fields=business_discovery.username({{ $json.ig_handle }}){username,name,biography,website,followers_count,media_count,profile_picture_url,media.limit(12){id,caption,media_type,media_url,thumbnail_url,like_count,comments_count,timestamp,permalink}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "bd",
+      "name": "Business Discovery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        420
+      ],
+      "credentials": {
+        "httpQueryAuth": {
+          "name": "Meta Graph token (query auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Compute S1/S2/S4, prefilters, evidence (spec docs/scorer-spec.md par.2, par.5).\n// route field drives the Route switch downstream.\nconst prospect = $('Split Queue').item.json;\nconst resp = $json.body ?? $json;\n\nif (resp.error) {\n  const route = resp.error.code === 110 ? 'unscoreable_personal' : 'fetch_error';\n  return { json: { ...prospect, route, error_message: resp.error.message } };\n}\nconst bd = resp.business_discovery;\nif (!bd) return { json: { ...prospect, route: 'fetch_error', error_message: 'no business_discovery in response' } };\n\nconst followers = bd.followers_count || 0;\nconst mediaCount = bd.media_count || 0;\nif (followers < 500 || followers > 20000 || mediaCount === 0) {\n  return { json: { ...prospect, route: 'disqualified', followers } };\n}\nconst media = (bd.media && bd.media.data) || [];\n\n// S1 - posting frequency\nconst now = Date.now();\nconst posts90 = media.filter(m => now - new Date(m.timestamp).getTime() <= 90 * 864e5).length;\nconst weekly = posts90 / 12.857;\nlet s1;\nif (media.length === 12 && posts90 === 12) s1 = 0;   // window saturated: rate >= 1/wk\nelse if (weekly < 0.25) s1 = 20;\nelse if (weekly < 0.5) s1 = 15;\nelse if (weekly < 1) s1 = 10;\nelse s1 = 0;\n\n// S2 - engagement vs segment benchmark (initial table; recalibrate after 200 scored)\nconst BENCH = { estetica:{er:.035,c:.002}, odonto:{er:.025,c:.0012}, salao:{er:.03,c:.0015},\n  restaurante:{er:.02,c:.001}, pet:{er:.04,c:.0025}, fitness:{er:.03,c:.0015}, outro:{er:.03,c:.0015} };\nconst bench = BENCH[prospect.segment] || BENCH.outro;\nlet s2, er = null, benchUsed = bench.er;\nif (media.length < 4) {\n  s2 = 12;                                            // thin data ~ weak (spec par.8)\n} else {\n  const hidden = media.filter(m => !m.like_count && (m.comments_count || 0) > 0).length;\n  let vals;\n  if (hidden >= 6) { vals = media.map(m => (m.comments_count || 0) / followers); benchUsed = bench.c; }\n  else vals = media.map(m => ((m.like_count || 0) + (m.comments_count || 0)) / followers);\n  const top = vals.indexOf(Math.max(...vals));        // drop single viral outlier\n  vals = vals.filter((_, i) => i !== top);\n  er = vals.reduce((a, b) => a + b, 0) / vals.length;\n  const pct = er / benchUsed;\n  s2 = pct < 0.4 ? 20 : pct < 0.7 ? 12 : pct < 1 ? 6 : 0;\n}\n\n// S4 - link in bio\nconst bio = bd.biography || '';\nconst s4 = (bd.website || /(wa\\.me|api\\.whatsapp|linktr\\.ee|bit\\.ly|beacons|linkin\\.bio|https?:\\/\\/)/i.test(bio)) ? 0 : 10;\n\nconst fmtPct = x => (x * 100).toFixed(1).replace('.', ',') + '%';\nconst evidence = [];\nif (s1 > 0) evidence.push({ signal: 'S1', pts: s1, text: `só ${posts90} publicações nos últimos 3 meses` });\nif (er !== null && s2 > 0) evidence.push({ signal: 'S2', pts: s2, text: `engajamento de ${fmtPct(er)} — a média do setor é ${fmtPct(benchUsed)}` });\nif (s4 > 0) evidence.push({ signal: 'S4', pts: s4, text: 'sem link de agendamento ou WhatsApp na bio' });\n\n// fetch image URLs same run - CDN links expire (spec par.8)\nconst images = media.slice(0, 9)\n  .map(m => m.media_type === 'VIDEO' ? (m.thumbnail_url || m.media_url) : (m.media_url || m.thumbnail_url))\n  .filter(Boolean);\n\nreturn { json: { ...prospect, route: 'score', followers, posts_90d: posts90, er, s1, s2, s4, biography: bio, images, evidence } };"
+      },
+      "id": "compute",
+      "name": "Compute Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "score",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "score"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "unscoreable_personal",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "unscoreable"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "disqualified",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "disqualified"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "fetch_error",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "fetch_error"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1200,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 500, temperature: 0, messages: [{ role: 'user', content: 'Você é um classificador. Analise a bio de Instagram de um negócio local\\nbrasileiro e responda APENAS com JSON válido, sem markdown, sem texto extra.\\n\\nDefinições:\\n- \"oferta\": a bio comunica claramente o que o negócio vende/faz e para quem\\n  (serviço + diferencial ou benefício). Apenas nome/cidade/emoji não conta.\\n- \"cta\": instrução explícita de ação (\"agende\", \"chame no WhatsApp\",\\n  \"clique no link\", \"peça pelo link\", \"reserve\").\\n\\nBio:\\n\"\"\"\\n' + ($json.biography || '') + '\\n\"\"\"\\nSegmento provável (do cadastro): ' + $json.segment + '\\n\\nResponda:\\n{\\n  \"has_offer\": boolean,\\n  \"has_cta\": boolean,\\n  \"detected_segment\": \"estetica|odonto|salao|restaurante|pet|fitness|outro\",\\n  \"segment_conflict\": boolean,\\n  \"notes_ptbr\": \"máx 15 palavras, fraqueza principal da bio\"\\n}' }] }) }}",
+        "options": {}
+      },
+      "id": "p1",
+      "name": "Claude P1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        260
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Anthropic x-api-key (header auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 500, temperature: 0, messages: [{ role: 'user', content: [{ type: 'text', text: 'Você é um auditor de identidade visual. Estas são as últimas publicações do\\nfeed de Instagram de um negócio local brasileiro (' + $json.segment + '). Avalie a\\nconsistência visual do grid como um todo. Responda APENAS com JSON válido.\\n\\nCritérios:\\n- Paleta de cores recorrente e proposital\\n- Tipografia/templates consistentes entre artes\\n- Proporção equilibrada entre foto real e arte gráfica\\n- Aparência amadora: prints, imagens esticadas, textos ilegíveis,\\n  artes genéricas de banco/IA sem marca\\n\\nResponda:\\n{\\n  \"consistency_1_5\": 1-5,\\n  \"dominant_colors_hex\": [\"#...\", \"#...\", \"#...\"],\\n  \"has_visible_branding\": boolean,\\n  \"amateur_signals_ptbr\": [\"máx 3 itens, 8 palavras cada\"],\\n  \"grid_summary_ptbr\": \"1 frase, tom neutro\"\\n}' }].concat(($json.images || []).map(u => ({ type: 'image', source: { type: 'url', url: u } }))) }] }) }}",
+        "options": {}
+      },
+      "id": "p2",
+      "name": "Claude P2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        260
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Anthropic x-api-key (header auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse P1/P2, compute S3/S5, assemble prospect_scores upsert row (spec par.3, par.5, par.6).\nconst d = $('Compute Signals').item.json;\n\nfunction parseClaude(resp) {\n  const text = (resp.content || []).map(c => c.text || '').join('');\n  return JSON.parse(text.replace(/```json|```/gi, '').trim());\n}\n\nlet p1, p2;\ntry {\n  p1 = parseClaude($('Claude P1').item.json);\n  p2 = parseClaude($json);\n} catch (e) {\n  return { json: { prospect_id: d.id, ig_handle: d.ig_handle, segment: d.segment,\n    followers: d.followers, s1: d.s1, s2: d.s2, s4: d.s4, er: d.er, posts_90d: d.posts_90d,\n    evidence: d.evidence, status: 'llm_error',\n    llm_raw: { p1: $('Claude P1').item.json, p2: $json, parse_error: e.message } } };\n}\n\nconst s3 = (!p1.has_offer && !p1.has_cta) ? 15 : (!p1.has_offer || !p1.has_cta) ? 8 : 0;\nconst s5 = p2.consistency_1_5 <= 2 ? 15 : p2.consistency_1_5 === 3 ? 8 : 0;\n\nconst evidence = [...d.evidence];\nif (s3 === 15) evidence.push({ signal: 'S3', pts: 15, text: 'a bio não diz o que vocês oferecem nem como agendar' });\nelse if (s3 === 8) evidence.push({ signal: 'S3', pts: 8, text: p1.notes_ptbr || 'bio sem oferta clara ou sem chamada para ação' });\nif (s5 > 0 && p2.grid_summary_ptbr) evidence.push({ signal: 'S5', pts: s5, text: p2.grid_summary_ptbr });\nevidence.sort((a, b) => b.pts - a.pts);\n\nconst auto = d.s1 + d.s2 + s3 + d.s4 + s5;   // auto_score is a generated column; not inserted\nreturn { json: {\n  prospect_id: d.id, ig_handle: d.ig_handle, followers: d.followers, segment: d.segment,\n  s1: d.s1, s2: d.s2, s3, s4: d.s4, s5,\n  er: d.er, posts_90d: d.posts_90d,\n  dominant_colors: p2.dominant_colors_hex || [],   // persisted ALWAYS - seeds Frame brand kit\n  evidence, llm_raw: { p1, p2 },\n  status: auto >= 50 ? 'in_review' : 'auto_scored'\n} };"
+      },
+      "id": "assemble",
+      "name": "Assemble Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// unscoreable_personal / disqualified: record status so the row leaves the queue\nconst d = $json;\nreturn { json: { prospect_id: d.id, ig_handle: d.ig_handle, segment: d.segment,\n  followers: d.followers ?? null, status: d.route } };"
+      },
+      "id": "minimal",
+      "name": "Minimal Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ejxoageyamogdgwwycvp.supabase.co/rest/v1/prospect_scores?on_conflict=ig_handle",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "upsert",
+      "name": "Upsert Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2020,
+        420
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Supabase service (custom auth)"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "skip",
+      "name": "Skip (retry next run)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        660
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 07:00": {
+      "main": [
+        [
+          {
+            "node": "Fetch Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Queue": {
+      "main": [
+        [
+          {
+            "node": "Split Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Queue": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 25s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 25s": {
+      "main": [
+        [
+          {
+            "node": "Business Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Business Discovery": {
+      "main": [
+        [
+          {
+            "node": "Compute Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Signals": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Claude P1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Minimal Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Minimal Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip (retry next run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude P1": {
+      "main": [
+        [
+          {
+            "node": "Claude P2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude P2": {
+      "main": [
+        [
+          {
+            "node": "Assemble Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Score": {
+      "main": [
+        [
+          {
+            "node": "Upsert Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Minimal Row": {
+      "main": [
+        [
+          {
+            "node": "Upsert Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Score": {
+      "main": [
+        [
+          {
+            "node": "Split Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip (retry next run)": {
+      "main": [
+        [
+          {
+            "node": "Split Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
