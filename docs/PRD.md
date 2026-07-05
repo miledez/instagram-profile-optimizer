@@ -6,7 +6,7 @@
 > `done` `cut` `changed` · priority: `P0` (launch-blocking) `P1` (pre-scale)
 > `P2` (later).
 
-**Version:** 1.0 · **Updated:** 2026-07-05 · **Owner:** Simon / mil&dez
+**Version:** 1.2 · **Updated:** 2026-07-05 · **Owner:** Simon / mil&dez
 
 ---
 
@@ -45,6 +45,7 @@ automation).
 | ID | Feature | Pri | Status | Acceptance criteria |
 |---|---|---|---|---|
 | F-101 | Handle resolver (`resolve_handles.py`) | P0 | building | ≥70% of prospects auto-resolved; method logged; invalid handles never written |
+| F-110 | Places prospecting CLI (`scripts/prospect.py`) | P0 | done | 6 segments; idempotent re-runs (dedupe on `places_id`); valid rows (E.164 phone, UF, city tier); D-007 |
 | F-102 | Business Discovery fetcher (n8n) | P0 | planned | 1 call/prospect; 25s spacing; error 110 → `unscoreable_personal` |
 | F-103 | Deterministic signals S1/S2/S4 | P0 | planned | Matches spec §2 tables; likes-hidden fallback works |
 | F-104 | P1 bio classifier | P0 | planned | JSON parse rate >98%; raw output logged to `llm_raw` |
@@ -139,3 +140,5 @@ automation).
 | Date | Ver | Change | Ref |
 |---|---|---|---|
 | 2026-07-05 | 1.0 | Initial PRD from pipeline design + scorer spec | D-001→D-006 |
+| 2026-07-05 | 1.1 | F-101 implementation complete (scrape + aggregator follow + Places fallback + suppression/dedupe); stays `building` until ≥70% AC verified on first real batch. Supabase project live (`ejxoageyamogdgwwycvp`, sa-east-1), migration 0001 applied — F-601 view deployed. | F-101, F-601 |
+| 2026-07-05 | 1.2 | Added F-110: prospecting (stage 1a) moved into this repo as `scripts/prospect.py`, `done`. First resolver batch on 79 off-ICP pilot rows: 40% auto-resolve — not an AC verdict (B2B clinics, no Places key at the time); fixes shipped (escaped-URL regex, platform-account blocklist, SSL retry). On-segment micro-sample: 3/3 with-website resolved. | F-110, F-101, D-007 |

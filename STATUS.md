@@ -7,28 +7,38 @@
 
 ## Done
 
-- [x] Pipeline architecture + compliance routes defined (see decisions D-001)
+- [x] Pipeline architecture + compliance routes defined (D-001)
 - [x] Scorer spec complete (`docs/scorer-spec.md`)
-- [x] PRD v1.0 (`docs/PRD.md`) — source of truth for scope
-- [x] Repo scaffold + initial Supabase schema (`0001_initial_schema.sql`)
-- [x] F-601 variant performance view (`v_variant_performance` in migration 0001)
+- [x] PRD v1.2 (`docs/PRD.md`) — source of truth for scope
+- [x] Repo scaffold, on GitHub (`miledez/instagram-profile-optimizer`)
+- [x] Supabase project live: `instagram-profile-optimizer`
+      (ref `ejxoageyamogdgwwycvp`, sa-east-1, free tier)
+- [x] Migration 0001 applied — 6 tables + `v_variant_performance` (F-601)
+- [x] F-110 prospecting CLI local (`scripts/prospect.py`, D-007) — 6 segments,
+      dedupe vs `prospects` table, smoke-tested live (5 salao + 3 pet in DB)
+- [x] F-101 resolver code complete; first batch run on 79 off-ICP pilot rows
+      (medicina do trabalho, from old run.py cache, segment `outro`):
+      40% auto-resolve. Fixes shipped from failure analysis: escaped-URL
+      regex (linktree/Wix), platform-account blocklist, SSL retry.
+      On-segment micro-sample: 3/3 with-website resolved.
+- [x] `.env` complete: Supabase URL/key + Places key, all verified live
 - [x] P1/P2 prompts drafted (`prompts/`)
-- [x] Repo on GitHub (`miledez/instagram-profile-optimizer`, HTTPS remote)
 
 ## In progress
 
-- [ ] F-101 handle resolver — code complete (website scrape, aggregator
-      one-level follow, Places details fallback, suppression + dedupe,
-      --limit/--dry-run); AC "≥70% auto-resolved" pending first real batch
-      (needs Supabase creds + prospects loaded) before PRD flips to done
+- [ ] F-101 AC "≥70% auto-resolved" — needs a real on-segment batch;
+      40% on off-ICP B2B pilot is not the verdict (those sites rarely
+      link IG; no-website rows are the main manual driver)
 
 ## Next actions (Week 1, in order)
 
 - [ ] Create Meta app: `instagram_basic` + `instagram_manage_insights`,
       long-lived token — resolves Q1, unblocks F-102
-- [ ] Apply migration 0001 to Supabase project
-- [ ] F-101: run first batch (`--dry-run` then live) once migration applied
-      and prospects imported; verify ≥70% auto-resolve → mark done in PRD
+- [ ] First on-segment batch: `python3 scripts/prospect.py --all --limit 20`
+      (~120 prospects), then `resolve_handles.py --dry-run --limit 100` →
+      judge F-101 AC → live run → mark done in PRD
+- [ ] Decide RLS: migration 0002 enabling RLS (no policies; service role
+      bypasses) — Supabase advisor flags all 6 tables, prospect PII/LGPD
 - [ ] F-102: n8n `01-scorer-daily` Business Discovery fetch (25s spacing,
       error 110 → `unscoreable_personal`)
 - [ ] F-103: deterministic signals S1/S2/S4 per spec §2 (likes-hidden fallback)
@@ -45,7 +55,15 @@
 - Meta app credentials not yet created (blocks F-102 Business Discovery calls)
 - Open questions Q1–Q4 in PRD §8; only Q1 (app review need) blocks week 1
 
+## Housekeeping
+
+- Rotate Supabase service_role key (was printed during debug session)
+- Delete leftover broken `.venv/` dir in repo root
+- Decide fate of 79 `outro` pilot rows in `prospects` (keep as resolver
+  test data vs delete before scoring starts)
+
 ## Current metrics
 
-- Prospects scored: 0 / target ≥100/day · Qualified (≥60): 0 · Sends: 0
+- Prospects in DB: 87 (79 outro pilot · 5 salao · 3 pet) · Scored: 0 ·
+  Qualified (≥60): 0 · Sends: 0
 - Week-1 exit criteria: scorer live, 100 profiles scored

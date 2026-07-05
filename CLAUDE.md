@@ -15,7 +15,7 @@ Business model: one-time makeover setup fee + monthly subscription
 
 | Stage | Lives in | Notes |
 |---|---|---|
-| 1a. Prospecting (Places + CNPJ) | existing `run.py` CLI (separate repo) | outputs to `prospects` table |
+| 1a. Prospecting (Places + CNPJ) | this repo: `scripts/prospect.py` | outputs to `prospects` table (D-007) |
 | 1b. Handle resolution + scoring | this repo: `scripts/`, `n8n/`, `prompts/` | spec: `docs/scorer-spec.md` |
 | 2. Mockup generation | Frame repo (`~/instagram-admin`) | consumes `dominant_colors` from scores |
 | 3. DM demo (Private Replies) | this repo: `n8n/` | runs on mil&dez IG account |

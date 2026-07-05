@@ -38,3 +38,11 @@ writes into the shared `prospects` table.
 Delivery >95% · reply ≥15% · reply→meeting ≥40% · meeting→close ≥25%
 (≈3% close of contacted). One A/B variable per week, min 100 sends/variant.
 Lock winning combo when reply ≥15% and close ≥3%, then scale volume.
+
+**D-007 · 2026-07-05 · Prospecting localized (supersedes D-005 in part)**
+Stage 1a moved into this repo as `scripts/prospect.py` — self-contained
+Places prospecting for the six IG segments, deduping against the shared
+`prospects` table (no local cache; Supabase is the single source of truth).
+The external `run.py` (miledez-main) keeps only its original four Sheets
+verticals for the other product line; its IG additions were reverted the
+same day to avoid two pipelines writing one table.
