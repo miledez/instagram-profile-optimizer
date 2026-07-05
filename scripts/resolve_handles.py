@@ -28,11 +28,20 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+# \\? handles JSON-escaped URLs (instagram.com\/handle) in linktree/SPA payloads
 IG_LINK_RE = re.compile(
-    r"instagram\.com/([A-Za-z0-9._]{1,30})/?(?:[\"'?#/]|$)", re.IGNORECASE
+    r"instagram\.com\\?/([A-Za-z0-9._]{1,30})\\?/?(?:[\"'?#/\\]|$)", re.IGNORECASE
 )
 HANDLE_RE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
-IGNORED_HANDLES = {"p", "reel", "reels", "stories", "explore", "accounts", "sharer"}
+IGNORED_HANDLES = {
+    # IG paths that are not profiles
+    "p", "reel", "reels", "stories", "explore", "accounts", "sharer",
+    "share", "tv", "direct", "invites", "about", "legal", "developer",
+    "blog", "web", "embed",
+    # official platform accounts sites link to (never a prospect)
+    "whatsapp", "facebook", "instagram", "meta", "twitter", "youtube",
+    "linkedin", "tiktok",
+}
 
 AGGREGATOR_DOMAINS = (
     "linktr.ee", "beacons.ai", "bio.link", "linkin.bio",
@@ -95,14 +104,18 @@ def normalize_url(url: str) -> str:
     return url if url.startswith(("http://", "https://")) else "https://" + url
 
 
-def fetch_html(url: str) -> str:
+def fetch_html(url: str, verify: bool = True) -> str:
     try:
         resp = requests.get(
             normalize_url(url), timeout=TIMEOUT,
-            headers={"User-Agent": UA}, allow_redirects=True,
+            headers={"User-Agent": UA}, allow_redirects=True, verify=verify,
         )
         if resp.ok and "text/html" in resp.headers.get("content-type", "text/html"):
             return resp.text[:500_000]
+    except requests.exceptions.SSLError:
+        # local-SMB sites with broken certs; public read-only fetch
+        if verify:
+            return fetch_html(url, verify=False)
     except requests.RequestException:
         pass
     return ""
