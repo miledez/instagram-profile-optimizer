@@ -26,17 +26,19 @@
 
 ## In progress
 
-- [ ] F-101 AC "≥70% auto-resolved" — needs a real on-segment batch;
-      40% on off-ICP B2B pilot is not the verdict (those sites rarely
-      link IG; no-website rows are the main manual driver)
+- [ ] F-101 AC "≥70% auto-resolved" — first on-segment batch (128 prospects):
+      47% overall / 64% of with-website; 33 rows (26%) have no website.
+      Custom Search API step added to close the gap (rejects zero-overlap
+      picks); needs `GOOGLE_CSE_ID` env var, then re-measure → mark done
 
 ## Next actions (Week 1, in order)
 
+- [ ] Create Programmable Search Engine (cse.google.com), set
+      `GOOGLE_CSE_ID` in `.env`, enable Custom Search API on the Google key;
+      re-run `resolve_handles.py --dry-run --segment <all six> --limit 200`
+      → if ≥70%, live run + mark F-101 done in PRD (mind 100 CSE queries/day)
 - [ ] Create Meta app: `instagram_basic` + `instagram_manage_insights`,
       long-lived token — resolves Q1, unblocks F-102
-- [ ] First on-segment batch: `python3 scripts/prospect.py --all --limit 20`
-      (~120 prospects), then `resolve_handles.py --dry-run --limit 100` →
-      judge F-101 AC → live run → mark done in PRD
 - [ ] Decide RLS: migration 0002 enabling RLS (no policies; service role
       bypasses) — Supabase advisor flags all 6 tables, prospect PII/LGPD
 - [ ] F-102: n8n `01-scorer-daily` Business Discovery fetch (25s spacing,
@@ -64,6 +66,6 @@
 
 ## Current metrics
 
-- Prospects in DB: 87 (79 outro pilot · 5 salao · 3 pet) · Scored: 0 ·
-  Qualified (≥60): 0 · Sends: 0
+- Prospects in DB: 207 (128 on-segment · 79 outro pilot) · Handles
+  resolvable dry-run: 61 · Scored: 0 · Qualified (≥60): 0 · Sends: 0
 - Week-1 exit criteria: scorer live, 100 profiles scored
