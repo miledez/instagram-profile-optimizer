@@ -16,28 +16,16 @@
 - [x] Migration 0001 applied — 6 tables + `v_variant_performance` (F-601)
 - [x] F-110 prospecting CLI local (`scripts/prospect.py`, D-007) — 6 segments,
       dedupe vs `prospects` table, smoke-tested live (5 salao + 3 pet in DB)
-- [x] F-101 resolver code complete; first batch run on 79 off-ICP pilot rows
-      (medicina do trabalho, from old run.py cache, segment `outro`):
-      40% auto-resolve. Fixes shipped from failure analysis: escaped-URL
-      regex (linktree/Wix), platform-account blocklist, SSL retry.
-      On-segment micro-sample: 3/3 with-website resolved.
+- [x] **F-101 DONE — AC met at 90%** (116/128 on-segment auto-resolved,
+      live run written: 61 website_scrape · 55 search · 12 manual queue).
+      Iterations that got there: escaped-URL regex, platform/asset
+      blocklists, SSL retry, accent folding + ≥3-char tokens, Brave
+      quoted→unquoted fallback gated on distinctive-token match.
 - [x] `.env` complete: Supabase URL/key + Places key, all verified live
 - [x] P1/P2 prompts drafted (`prompts/`)
 
-## In progress
-
-- [ ] F-101 AC "≥70% auto-resolved" — first on-segment batch (128 prospects):
-      47% overall / 64% of with-website; 33 rows (26%) have no website.
-      Custom Search API step added to close the gap (rejects zero-overlap
-      picks); needs `GOOGLE_CSE_ID` env var, then re-measure → mark done
-
 ## Next actions (Week 1, in order)
 
-- [ ] Sign up at api-dashboard.search.brave.com, set `BRAVE_SEARCH_API_KEY`
-      in `.env` (Google CSE closed to new customers since 2026, sunsets
-      2027-01; Brave ≈ $5/1k with $5/mo free credit, needs card +
-      attribution note); re-run `resolve_handles.py --dry-run --segment
-      <all six> --limit 200` → if ≥70%, live run + mark F-101 done in PRD
 - [ ] Create Meta app: `instagram_basic` + `instagram_manage_insights`,
       long-lived token — resolves Q1, unblocks F-102
 - [ ] Decide RLS: migration 0002 enabling RLS (no policies; service role
@@ -60,6 +48,13 @@
 
 ## Housekeeping
 
+- Spot-check the 55 `ig_resolution_method='search'` handles before scoring —
+  lower precision than scrapes; known-suspect examples: GG Cabeleireiros →
+  @lourdescabeleireirosmegahair, Cléber Cordeiro → @studiocapitalbeauty,
+  Petz Augusta → @augustapetshop (error 110 + follower prefilter + human
+  review are the backstops, but a 5-min eyeball is cheap)
+- Brave API: attribute Brave Search on project site/about page ($5/mo free
+  credit condition)
 - Rotate Supabase service_role key (was printed during debug session)
 - Delete leftover broken `.venv/` dir in repo root
 - Decide fate of 79 `outro` pilot rows in `prospects` (keep as resolver
@@ -68,5 +63,5 @@
 ## Current metrics
 
 - Prospects in DB: 207 (128 on-segment · 79 outro pilot) · Handles
-  resolvable dry-run: 61 · Scored: 0 · Qualified (≥60): 0 · Sends: 0
+  resolved: 116 (90%) · Manual queue: 12 · Scored: 0 · Qualified: 0 · Sends: 0
 - Week-1 exit criteria: scorer live, 100 profiles scored

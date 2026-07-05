@@ -30,6 +30,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -43,7 +44,7 @@ IGNORED_HANDLES = {
     # IG paths that are not profiles
     "p", "reel", "reels", "stories", "explore", "accounts", "sharer",
     "share", "tv", "direct", "invites", "about", "legal", "developer",
-    "blog", "web", "embed",
+    "blog", "web", "embed", "popular",
     # official platform accounts sites link to (never a prospect)
     "whatsapp", "facebook", "instagram", "meta", "twitter", "youtube",
     "linkedin", "tiktok", "google",
@@ -73,22 +74,48 @@ def extract_ig_handles(html: str) -> list[str]:
     return out
 
 
+# Segment/category words shared by every competitor — a match on one of
+# these says nothing about WHICH salon/clinic the handle belongs to
+GENERIC_WORDS = {
+    "salao", "beleza", "barbearia", "barber", "barbeiro", "barbeiros",
+    "studio", "estudio", "estetica", "clinica", "academia", "instituto",
+    "espaco", "restaurante", "pizzaria", "hamburgueria", "petshop", "pet",
+    "odonto", "odontologia", "dental", "dentista", "fitness", "hair",
+    "cabeleireiro", "cabeleireiros", "gym", "vet", "veterinaria",
+}
+
+
+def _name_tokens(business_name: str) -> set[str]:
+    folded = "".join(
+        c for c in unicodedata.normalize("NFD", business_name.lower())
+        if unicodedata.category(c) != "Mn"
+    )
+    # <3-char tokens ("de", "e") would substring-match almost any handle
+    return {
+        t for t in (re.sub(r"[^a-z0-9]", "", w) for w in folded.split())
+        if len(t) >= 3 and t not in {"dos", "das", "com"}
+    }
+
+
 def pick_best_handle(handles: list[str], business_name: str,
                      require_match: bool = False) -> str | None:
     """Prefer handle with highest token overlap with business name.
 
-    require_match: reject a zero-overlap best pick — mandatory for web-search
-    candidates, where an unrelated profile can rank first.
+    require_match: for web-search candidates — reject the best pick unless
+    it matches a DISTINCTIVE token (not a generic category word), since an
+    unrelated competitor can rank first.
     """
     if not handles:
         return None
-    tokens = set(re.sub(r"[^a-z0-9]", "", w) for w in business_name.lower().split())
+    tokens = _name_tokens(business_name)
     def score(h: str) -> int:
         clean = re.sub(r"[^a-z0-9]", "", h)
-        return sum(1 for t in tokens if t and t in clean)
+        return sum(1 for t in tokens if t in clean)
     best = max(handles, key=score)
-    if require_match and score(best) == 0:
-        return None
+    if require_match:
+        clean = re.sub(r"[^a-z0-9]", "", best)
+        if not any(t in clean for t in tokens if t not in GENERIC_WORDS):
+            return None
     return best
 
 
@@ -168,13 +195,11 @@ def _handles_from_links(links: list[str]) -> list[str]:
     return handles
 
 
-def brave_search_handles(business_name: str, city: str | None,
-                         api_key: str) -> list[str]:
-    """Instagram handles from Brave Search results, best-ranked first."""
+def _brave_query(query: str, api_key: str) -> list[str]:
     try:
         resp = requests.get(
             "https://api.search.brave.com/res/v1/web/search",
-            params={"q": _search_query(business_name, city), "count": 5},
+            params={"q": query, "count": 5},
             headers={"X-Subscription-Token": api_key, "Accept": "application/json"},
             timeout=TIMEOUT,
         )
@@ -182,6 +207,22 @@ def brave_search_handles(business_name: str, city: str | None,
     except (requests.RequestException, ValueError):
         return []
     return _handles_from_links([i.get("url", "") for i in items])
+
+
+def brave_search_handles(business_name: str, city: str | None,
+                         api_key: str) -> list[str]:
+    """Instagram handles from Brave Search, best-ranked first.
+
+    Exact-phrase first (high precision, but Brave often returns nothing for
+    quoted local-business names); unquoted fallback relies on the caller's
+    distinctive-token guard for precision.
+    """
+    handles = _brave_query(_search_query(business_name, city), api_key)
+    if not handles:
+        time.sleep(0.3)
+        unquoted = f"site:instagram.com {business_name}" + (f" {city}" if city else "")
+        handles = _brave_query(unquoted, api_key)
+    return handles
 
 
 def cse_search_handles(business_name: str, city: str | None,
