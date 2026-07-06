@@ -3,7 +3,7 @@
 > Volatile. Update every working session. History belongs in git, not here.
 
 **Phase:** Week 1 — scorer build (PRD milestone 1: F-101→F-105, F-107, F-108)
-**Last updated:** 2026-07-05
+**Last updated:** 2026-07-06
 
 ## Done
 
@@ -30,11 +30,17 @@
       error-110 routing, prefilters, S1/S2/S4 + evidence Code node, Claude
       P1/P2 HTTP, upsert w/ on_conflict — JS fixture-tested (25 checks)
 - [x] 79 `outro` pilot rows deleted — prospects table is 128 on-segment only
+- [x] Meta app live: `profile-optimizer` (id 997035036441085), Instagram use
+      case + "API setup with Facebook login". Long-lived token generated
+      (expires 2026-09-03, re-exchange before then), Business Discovery
+      verified live against @augustapetshop — **Q1 resolved: dev mode
+      suffices for scorer, no app review needed**. IG anchor id in `.env`
+      (`META_IG_USER_ID`). Note: anchor is @simsilione via "Larsen Invest"
+      page (fine for BD — anchor invisible to queried profiles); stage-3 DM
+      demo will need the real mil&dez IG account linked instead.
 
 ## Next actions (Week 1, in order)
 
-- [ ] Create Meta app: `instagram_basic` + `instagram_manage_insights`,
-      long-lived token — resolves Q1, unblocks live scorer test
 - [ ] Import `n8n/01-scorer-daily.json` into n8n, create the 3 credentials
       + set IG user id (see `n8n/README.md` setup section)
 - [ ] Live scorer run on 2–3 handles → verify rows in `prospect_scores`,
@@ -45,8 +51,8 @@
 
 ## Blockers
 
-- Meta app credentials not yet created (blocks F-102 Business Discovery calls)
-- Open questions Q1–Q4 in PRD §8; only Q1 (app review need) blocks week 1
+- None for week 1 (Meta credentials done, Q1 resolved). Q2–Q4 in PRD §8 open
+  but non-blocking.
 
 ## Housekeeping
 
@@ -59,6 +65,9 @@
   credit condition)
 - Rotate Supabase service_role key (was printed during debug session)
 - Delete leftover broken `.venv/` dir in repo root
+- Meta tech-provider verification for Larsen Invest portfolio: submit before
+  2026-09-03 (draft saved in dev dashboard; non-blocking for week 1)
+- Calendar reminder ~2026-08-25: re-exchange Meta long-lived token (60d)
 
 ## Current metrics
 
